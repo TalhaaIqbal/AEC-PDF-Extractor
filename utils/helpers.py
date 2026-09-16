@@ -5,7 +5,7 @@ Common utility functions used across the application
 import json
 import io
 import base64
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 from PIL import Image
 from config.settings import MAX_CONTEXT_CHARS, LLM_MAX_IMAGE_DIMENSION
 
