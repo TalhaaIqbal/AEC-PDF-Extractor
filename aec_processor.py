@@ -15,7 +15,7 @@ from services.ai_analyzer import analyze_page, consolidate_results
 from services.report_generator import build_no_data_report, generate_markdown_report
 
 
-async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optional[Callable[[int], None]] = None):
+async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optional[Callable[[int], None]] = None) -> dict:
     """
     Main PDF processing function - orchestrates the entire pipeline
     

@@ -56,6 +56,13 @@ LLM_MAX_IMAGE_DIMENSION = 2000
 PDF_DPI = 250
 MAX_CONTEXT_CHARS = 30000
 
+# Supabase Configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "pdfs")
+
+USE_SUPABASE = all([SUPABASE_URL, SUPABASE_KEY, SUPABASE_BUCKET])
+
 
 def configure_cors(app: FastAPI) -> None:
     """Configure CORS middleware for the FastAPI application"""

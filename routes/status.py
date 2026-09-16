@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.get("/status/{session_id}")
 async def get_status(session_id: str):
-    """Get processing status for a session"""
+    """Get processing status for a session (for backward compatibility)"""
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
