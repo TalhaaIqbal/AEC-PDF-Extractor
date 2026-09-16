@@ -41,7 +41,7 @@ sessions: Dict[str, dict] = {}
 CORS_ORIGINS = [
     "*"
 ]
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_CREDENTIALS = False
 CORS_ALLOW_METHODS = ["*"]
 CORS_ALLOW_HEADERS = ["*"]
 
