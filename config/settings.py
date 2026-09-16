@@ -39,9 +39,7 @@ sessions: Dict[str, dict] = {}
 
 # CORS configuration
 CORS_ORIGINS = [
-    "http://localhost:3000", 
-    "http://localhost:3001",
-    "https://gradually-grain-gaming.ngrok-free.dev"
+    "*"
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ["*"]
