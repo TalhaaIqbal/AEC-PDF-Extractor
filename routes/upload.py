@@ -26,8 +26,11 @@ async def upload_pdf(file: UploadFile = File(...)):
         # Create session directory
         session_upload_dir = UPLOAD_DIR / session_id
         session_output_dir = OUTPUT_DIR / session_id
-        session_upload_dir.mkdir(exist_ok=True)
-        session_output_dir.mkdir(exist_ok=True)
+        try:
+            session_upload_dir.mkdir(exist_ok=True, parents=True)
+            session_output_dir.mkdir(exist_ok=True, parents=True)
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Cannot create directories: {str(e)}")
         
         # Save uploaded file
         file_path = session_upload_dir / file.filename

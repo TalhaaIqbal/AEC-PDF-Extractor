@@ -13,16 +13,36 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Directory configuration
-UPLOAD_DIR = Path("uploads")
-OUTPUT_DIR = Path("outputs")
-UPLOAD_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
+import tempfile
+import os
+
+# Use temporary directory for serverless environments
+if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+    # Use temp directory for serverless environments
+    UPLOAD_DIR = Path(tempfile.gettempdir()) / "uploads"
+    OUTPUT_DIR = Path(tempfile.gettempdir()) / "outputs"
+else:
+    # Use local directories for development
+    UPLOAD_DIR = Path("uploads")
+    OUTPUT_DIR = Path("outputs")
+
+# Create directories if they don't exist (will fail silently in read-only environments)
+try:
+    UPLOAD_DIR.mkdir(exist_ok=True, parents=True)
+    OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
+except OSError:
+    # In read-only environments, we'll handle directory creation per-request
+    pass
 
 # In-memory session storage (in production, use Redis or database)
 sessions: Dict[str, dict] = {}
 
 # CORS configuration
-CORS_ORIGINS = ["http://localhost:3000", "http://localhost:3001"]
+CORS_ORIGINS = [
+    "http://localhost:3000", 
+    "http://localhost:3001",
+    "https://gradually-grain-gaming.ngrok-free.dev"
+]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ["*"]
 CORS_ALLOW_HEADERS = ["*"]
@@ -37,109 +57,6 @@ if not OPENAI_API_KEY:
 LLM_MAX_IMAGE_DIMENSION = 2000
 PDF_DPI = 250
 MAX_CONTEXT_CHARS = 30000
-
-# JSON Schemas
-SYSTEM_PROMPT = """
-You are an expert AEC (architecture / engineering / construction)
-drawing interpreter.
-
-PRIMARY EVIDENCE: the page image itself.
-SUPPORTING EVIDENCE (when provided): native PDF text spans and
-vector path geometry extracted directly from the file.
-
-Your job is to detect and extract only MEANINGFUL, RELIABLE AEC
-information:
-
-PROJECT / SHEET
-- project name, project number, sheet number, sheet title,
-  drawing title, discipline, drawing type, revision info
-
-SPACES
-- room names, room numbers, space functions, major zones
-
-ELEMENTS
-- walls, partitions, doors, windows, openings, stairs, ramps,
-  columns, structural elements, important fixtures
-
-DIMENSIONS / LEVELS
-- dimensions, elevations, floor levels, ceiling heights,
-  grid references
-
-ANNOTATIONS
-- notes, material callouts, specifications, section/detail
-  references
-
-RELATIONSHIPS
-- room adjacency, door-connects-room-A-to-room-B, window belongs
-  to a wall/room, stairs connect levels
-
-RULES:
-- Trust the image over any supporting text/vector evidence.
-- Never invent information. If it cannot be reliably determined,
-  omit it or leave the field empty.
-- If this page contains NO detectable AEC content at all (blank
-  page, cover sheet with no drawing, unreadable scan, etc.), set
-  "detection_status" to "no_elements_detected" and leave every
-  list empty rather than guessing.
-- Ignore borders, page frames, and the title block/legend UNLESS
-  extracting sheet/project metadata from them specifically.
-- Do not reproduce raw OCR/vector noise or machine IDs.
-
-Return ONLY valid JSON. No Markdown fences, no explanations
-outside the JSON.
-"""
-
-PAGE_JSON_SCHEMA = """{
-  "page": <int>,
-  "detection_status": "ok" | "no_elements_detected",
-  "sheet": {
-    "sheet_number": null,
-    "sheet_title": null,
-    "drawing_title": null,
-    "discipline": null,
-    "drawing_type": null
-  },
-  "project": {
-    "project_name": null,
-    "project_number": null
-  },
-  "levels": [],
-  "grids": [],
-  "rooms": [],
-  "walls": [],
-  "doors": [],
-  "windows": [],
-  "columns": [],
-  "stairs": [],
-  "dimensions": [],
-  "elevations": [],
-  "annotations": [],
-  "references": [],
-  "materials": [],
-  "notes": [],
-  "relationships": []
-}"""
-
-FINAL_SCHEMA = """{
-  "project": {"project_name": null, "project_number": null},
-  "sheets": [],
-  "levels": [],
-  "grids": [],
-  "rooms": [],
-  "walls": [],
-  "doors": [],
-  "windows": [],
-  "columns": [],
-  "stairs": [],
-  "dimensions": [],
-  "elevations": [],
-  "annotations": [],
-  "references": [],
-  "materials": [],
-  "notes": [],
-  "relationships": [],
-  "pages": []
-}"""
 
 
 def configure_cors(app: FastAPI) -> None:

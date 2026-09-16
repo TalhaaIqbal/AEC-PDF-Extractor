@@ -6,7 +6,10 @@ import os
 import json
 from typing import Optional, Callable
 
-from config.settings import PDF_DPI, FINAL_SCHEMA
+from config.settings import PDF_DPI
+from prompts import load_final_schema
+
+FINAL_SCHEMA = load_final_schema()
 from services.pdf_processor import classify_pdf_pages, extract_vector_data, render_page_images
 from services.ai_analyzer import analyze_page, consolidate_results
 from services.report_generator import build_no_data_report, generate_markdown_report

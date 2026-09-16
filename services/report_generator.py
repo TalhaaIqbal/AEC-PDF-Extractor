@@ -6,9 +6,11 @@ import json
 from typing import Dict, Any
 from openai import AsyncOpenAI
 from config.settings import MODEL, OPENAI_API_KEY
+from prompts import load_report_generation_prompt
 
 # Initialize OpenAI client
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+REPORT_SYSTEM_PROMPT = load_report_generation_prompt()
 
 
 def build_no_data_report(result: Dict[str, Any]) -> str:
@@ -62,52 +64,6 @@ async def generate_markdown_report(final_result: Dict[str, Any]) -> str:
     Returns:
         Markdown report string
     """
-    report_system_prompt = """
-You are an expert AEC (Architecture, Engineering, Construction)
-document analyst and technical report writer.
-
-Your task is to convert the supplied structured AEC JSON into a
-LONG, HUMAN-READABLE MARKDOWN REPORT.
-
-The report will be read by normal users such as contractors,
-architects, engineers, project managers, building owners, clients.
-
-CRITICAL ACCURACY RULES:
-1. USE ONLY INFORMATION PRESENT IN THE SUPPLIED JSON.
-2. NEVER invent information.
-3. NEVER estimate missing dimensions, areas, quantities.
-4. Preserve exact printed values (e.g., 15'-6" stays 15'-6").
-5. Clearly distinguish between exact extracted information, 
-   information not provided, and uncertain information.
-6. If an element has a count of zero, say "0 extracted" rather 
-   than "0 physically present".
-7. Do not assume missing data means the physical drawing has none.
-8. Do not create dimensions from room areas or calculate missing areas.
-
-Create a comprehensive report with these sections:
-1. Project / Drawing Overview
-2. Overall Element Count
-3. Rooms / Spaces
-4. Dimensions
-5. Wall Information
-6. Doors / Windows / Openings
-7. Equipment / Fixtures / Building Systems
-8. Annotations / Callouts
-9. Elevations
-10. Materials / Finishes
-11. Construction / General Notes
-12. Space Relationships
-13. Drawing References / Details
-14. Important Measurements and Areas Summary
-15. Compliance / Life Safety Information
-16. Data Gaps / Extraction Limitations
-17. Final Human-Readable Summary
-
-Use Markdown tables, headings, bullet points, and bold text for
-important values. Make it professional and easy to scan.
-
-Return ONLY the final Markdown report. No JSON, no explanations.
-"""
     
     try:
         report_response = await client.chat.completions.create(
@@ -115,7 +71,7 @@ Return ONLY the final Markdown report. No JSON, no explanations.
             messages=[
                 {
                     "role": "system",
-                    "content": report_system_prompt
+                    "content": REPORT_SYSTEM_PROMPT
                 },
                 {
                     "role": "user",

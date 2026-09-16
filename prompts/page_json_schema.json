@@ -1,0 +1,30 @@
+{
+  "page": "integer",
+  "detection_status": "ok | no_elements_detected",
+  "sheet": {
+    "sheet_number": "null | string",
+    "sheet_title": "null | string",
+    "drawing_title": "null | string",
+    "discipline": "null | string",
+    "drawing_type": "null | string"
+  },
+  "project": {
+    "project_name": "null | string",
+    "project_number": "null | string"
+  },
+  "levels": [],
+  "grids": [],
+  "rooms": [],
+  "walls": [],
+  "doors": [],
+  "windows": [],
+  "columns": [],
+  "stairs": [],
+  "dimensions": [],
+  "elevations": [],
+  "annotations": [],
+  "references": [],
+  "materials": [],
+  "notes": [],
+  "relationships": []
+}
