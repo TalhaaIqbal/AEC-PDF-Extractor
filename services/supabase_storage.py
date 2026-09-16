@@ -109,6 +109,47 @@ class SupabaseStorage:
         
         return f"{self.url}/storage/v1/object/public/{self.bucket}/{storage_path}"
     
+    async def upload_stream(self, file_stream, storage_path: str, content_type: str = "application/pdf", chunk_size: int = 5 * 1024 * 1024) -> str:
+        """
+        Upload a file stream to Supabase Storage in chunks to avoid memory issues
+        
+        Args:
+            file_stream: File-like object to read from
+            storage_path: Path in Supabase storage
+            content_type: MIME type of the file
+            chunk_size: Size of chunks to upload (default 5MB)
+        
+        Returns:
+            Public URL of the uploaded file
+        """
+        upload_url = f"{self.url}/storage/v1/object/{self.bucket}/{storage_path}"
+        print(f"DEBUG Streaming upload to bucket={self.bucket} url={upload_url}")
+        
+        async def file_generator():
+            while True:
+                chunk = await file_stream.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.put(
+                upload_url,
+                headers={
+                    "apikey": self.key,
+                    "Authorization": f"Bearer {self.key}",
+                    "Content-Type": content_type
+                },
+                content=file_generator()
+            )
+            
+            print(f"DEBUG response status={response.status_code}")
+            
+            if response.status_code not in [200, 201]:
+                raise Exception(f"Supabase upload failed: {response.text}")
+        
+        return f"{self.url}/storage/v1/object/public/{self.bucket}/{storage_path}"
+    
     async def delete_file(self, storage_path: str) -> None:
         """
         Delete a file from Supabase Storage

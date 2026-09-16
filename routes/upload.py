@@ -30,18 +30,10 @@ async def upload_pdf(file: UploadFile = File(...)):
         session_id = str(uuid.uuid4())
         print(f"DEBUG: Generated session_id {session_id}")
         
-        # Read file content
-        file_content = await file.read()
-        print(f"DEBUG: Read {len(file_content)} bytes")
-        
         # Determine storage approach
         storage_path = None
         if USE_SUPABASE and supabase_storage:
-            print(f"DEBUG: Using Supabase storage")
-            # Use Supabase for file storage
-            storage_path = f"uploads/{session_id}/{file.filename}"
-            await supabase_storage.upload_bytes(file_content, storage_path, "application/pdf")
-            
+            print(f"DEBUG: Using Supabase storage with streaming")
             # Create temporary local directory for processing
             temp_dir = Path(tempfile.mkdtemp())
             session_upload_dir = temp_dir / "uploads" / session_id
@@ -49,10 +41,17 @@ async def upload_pdf(file: UploadFile = File(...)):
             session_upload_dir.mkdir(parents=True, exist_ok=True)
             session_output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Save file locally for processing
+            # Save file locally for processing (stream to disk to avoid memory issues)
             file_path = session_upload_dir / file.filename
             with open(file_path, "wb") as buffer:
-                buffer.write(file_content)
+                # Stream in chunks to avoid loading entire file into memory
+                chunk_size = 1024 * 1024  # 1MB chunks
+                while chunk := await file.read(chunk_size):
+                    buffer.write(chunk)
+            
+            # Now upload to Supabase from the local file
+            storage_path = f"uploads/{session_id}/{file.filename}"
+            await supabase_storage.upload_file(str(file_path), storage_path)
         else:
             print(f"DEBUG: Using local storage")
             # Use local file storage
@@ -64,10 +63,13 @@ async def upload_pdf(file: UploadFile = File(...)):
             except OSError as e:
                 raise HTTPException(status_code=500, detail=f"Cannot create directories: {str(e)}")
             
-            # Save uploaded file
+            # Save uploaded file (stream to disk to avoid memory issues)
             file_path = session_upload_dir / file.filename
             with open(file_path, "wb") as buffer:
-                buffer.write(file_content)
+                # Stream in chunks to avoid loading entire file into memory
+                chunk_size = 1024 * 1024  # 1MB chunks
+                while chunk := await file.read(chunk_size):
+                    buffer.write(chunk)
         
         print(f"DEBUG: File saved to {file_path}")
         
