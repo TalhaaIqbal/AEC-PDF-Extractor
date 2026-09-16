@@ -1,20 +1,22 @@
 """
 Upload Routes
-Routes for PDF file upload and session initialization
+Routes for PDF file upload and immediate processing
 """
 from fastapi import APIRouter, UploadFile, File, HTTPException
 import shutil
 import uuid
+import tempfile
 from pathlib import Path
+from aec_processor import process_pdf
 
-from config.settings import UPLOAD_DIR, OUTPUT_DIR, sessions
+from config.settings import UPLOAD_DIR, OUTPUT_DIR
 
 router = APIRouter()
 
 
 @router.post("/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
-    """Upload a PDF file and start processing"""
+    """Upload a PDF file and process it immediately"""
     try:
         # Validate file type
         if not file.filename.endswith('.pdf'):
@@ -23,36 +25,42 @@ async def upload_pdf(file: UploadFile = File(...)):
         # Generate unique session ID
         session_id = str(uuid.uuid4())
         
-        # Create session directory
-        session_upload_dir = UPLOAD_DIR / session_id
-        session_output_dir = OUTPUT_DIR / session_id
-        try:
-            session_upload_dir.mkdir(exist_ok=True, parents=True)
-            session_output_dir.mkdir(exist_ok=True, parents=True)
-        except OSError as e:
-            raise HTTPException(status_code=500, detail=f"Cannot create directories: {str(e)}")
+        # Use temp directory for processing (works in both local and serverless)
+        temp_dir = Path(tempfile.gettempdir()) / f"aec_{session_id}"
+        temp_dir.mkdir(exist_ok=True, parents=True)
         
-        # Save uploaded file
-        file_path = session_upload_dir / file.filename
+        # Save uploaded file to temp directory
+        file_path = temp_dir / file.filename
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Initialize session state
-        sessions[session_id] = {
-            "status": "uploaded",
-            "filename": file.filename,
-            "file_path": str(file_path),
-            "output_dir": str(session_output_dir),
-            "progress": 0,
-            "result": None,
-            "error": None
-        }
+        # Process PDF immediately with all AI steps
+        result = await process_pdf(
+            str(file_path),
+            str(temp_dir),
+            progress_callback=lambda progress: None  # No progress updates needed
+        )
+        
+        # Read the markdown report
+        report_file = temp_dir / "aec_human_readable_report.md"
+        markdown_report = ""
+        if report_file.exists():
+            with open(report_file, "r", encoding="utf-8") as f:
+                markdown_report = f.read()
+        
+        # Clean up temp files
+        try:
+            shutil.rmtree(temp_dir)
+        except:
+            pass  # Cleanup failed but processing succeeded
         
         return {
             "session_id": session_id,
             "filename": file.filename,
-            "status": "uploaded"
+            "status": "completed",
+            "result": result,
+            "markdown": markdown_report
         }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
