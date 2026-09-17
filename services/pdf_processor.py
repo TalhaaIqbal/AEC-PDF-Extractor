@@ -73,27 +73,31 @@ def extract_vector_data(pdf_path: str, page_index: int) -> Dict[str, List[Dict[s
                         "font_size": round(span["size"], 1)
                     })
 
-    paths = []
+    # Instead of sending thousands of individual paths (noise), provide a summary
+    # Focus budget on text spans which are more useful for extraction
+    path_summary = {
+        "total_paths": len(drawings),
+        "path_types": {},
+        "has_geometry": len(drawings) > 0
+    }
+    
+    # Count path types for summary
     for d in drawings:
-        rect = d.get("rect")
-        paths.append({
-            "type": d.get("type"),
-            "rect": [round(v, 1) for v in rect] if rect else None,
-            "stroke_width": d.get("width"),
-            "item_count": len(d.get("items", []))
-        })
+        path_type = d.get("type", "unknown")
+        path_summary["path_types"][path_type] = path_summary["path_types"].get(path_type, 0) + 1
 
-    return {"texts": texts, "paths": paths}
+    return {"texts": texts, "paths": path_summary}
 
 
-def render_page_images(pdf_path: str, output_dir: str, dpi: int = 250) -> List[str]:
+def render_page_images(pdf_path: str, output_dir: str, dpi: int = 250, max_dimension: int = 2000) -> List[str]:
     """
-    Render PDF pages to images
+    Render PDF pages to images at optimal resolution for LLM processing
     
     Args:
         pdf_path: Path to the PDF file
         output_dir: Directory to save rendered images
-        dpi: DPI for rendering
+        dpi: DPI for rendering (default 250, but images will be resized to max_dimension)
+        max_dimension: Maximum dimension (width or height) for output images
     
     Returns:
         List of paths to rendered images
@@ -106,7 +110,13 @@ def render_page_images(pdf_path: str, output_dir: str, dpi: int = 250) -> List[s
     page_paths = []
 
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=dpi, alpha=False)
+        # Calculate optimal DPI to directly render at target size
+        rect = page.rect
+        max_page_dim = max(rect.width, rect.height)
+        optimal_dpi = min(dpi, int(max_dimension / max_page_dim * 72))
+
+        # Render at optimal DPI to avoid wasteful high-res rendering
+        pix = page.get_pixmap(dpi=optimal_dpi, alpha=False)
         path = os.path.join(output_dir, f"page_{i:04d}.jpg")
         pix.save(path)
         page_paths.append(path)

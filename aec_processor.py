@@ -6,7 +6,7 @@ import os
 import json
 from typing import Optional, Callable
 
-from config.settings import PDF_DPI, FINAL_SCHEMA
+from config.settings import PDF_DPI, LLM_MAX_IMAGE_DIMENSION, FINAL_SCHEMA
 from services.pdf_processor import classify_pdf_pages, extract_vector_data, render_page_images
 from services.ai_analyzer import analyze_page, consolidate_results
 from services.report_generator import build_no_data_report, generate_markdown_report
@@ -54,7 +54,7 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
     
     # Stage 3: Render page images
     page_image_dir = os.path.join(output_dir, "pdf_pages")
-    page_images = render_page_images(pdf_path, page_image_dir, PDF_DPI)
+    page_images = render_page_images(pdf_path, page_image_dir, PDF_DPI, LLM_MAX_IMAGE_DIMENSION)
     has_page_images = len(page_images) > 0
     
     if not has_page_images:
@@ -69,6 +69,7 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
     
     # Stage 4: Process each page
     page_results = []
+    failed_pages = []
     total_pages = len(page_images)
     
     for i, image_path in enumerate(page_images):
@@ -82,6 +83,8 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
                 "detection_status": "error",
                 "error": str(e)
             }
+            failed_pages.append(i + 1)
+
         
         # Save individual page result
         page_output_file = os.path.join(output_dir, f"page_{i:04d}.json")
@@ -96,13 +99,42 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
             progress_callback(progress)
     
     # Stage 5: Consolidate results
-    if all(r.get("detection_status") == "no_elements_detected" for r in page_results):
+    # Filter out error pages before consolidation
+    valid_page_results = [r for r in page_results if r.get("detection_status") != "error"]
+    
+    if not valid_page_results:
+        # All pages failed
+        final_result = {
+            "status": "all_pages_failed",
+            "message": f"All {len(page_results)} pages failed to process.",
+            "error_pages": failed_pages,
+            "total_pages": len(page_results)
+        }
+    elif all(r.get("detection_status") == "no_elements_detected" for r in valid_page_results):
         final_result = json.loads(FINAL_SCHEMA)
         final_result["status"] = "no_elements_detected"
         final_result["message"] = "No AEC elements were detected on any page."
-        final_result["pages"] = [r.get("page") for r in page_results]
+        final_result["pages"] = [r.get("page") for r in valid_page_results]
+        if failed_pages:
+            final_result["error_pages"] = failed_pages
+            final_result["message"] += f" Some pages ({len(failed_pages)}) failed to process."
     else:
-        final_result = await consolidate_results(page_results)
+        try:
+            final_result = await consolidate_results(valid_page_results)
+            # Add error page information to the result
+            if failed_pages:
+                final_result["error_pages"] = failed_pages
+                final_result["error_page_count"] = len(failed_pages)
+        except Exception as e:
+            # Consolidation failed
+            final_result = {
+                "status": "consolidation_failed",
+                "message": f"Failed to consolidate page results: {str(e)}",
+                "error": str(e),
+                "error_pages": failed_pages,
+                "total_pages": len(page_results),
+                "successful_pages": len(valid_page_results)
+            }
     
     if progress_callback:
         progress_callback(80)
@@ -116,7 +148,8 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
         progress_callback(90)
     
     # Stage 7: Generate human-readable report
-    if final_result.get("status") in ("no_images_detected", "no_elements_detected"):
+    error_statuses = ("no_images_detected", "no_elements_detected", "all_pages_failed", "consolidation_failed")
+    if final_result.get("status") in error_statuses:
         markdown_report = build_no_data_report(final_result)
     else:
         markdown_report = await generate_markdown_report(final_result)

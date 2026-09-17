@@ -23,12 +23,42 @@ def build_no_data_report(result: Dict[str, Any]) -> str:
     """
     status = result.get("status", "unknown")
     message = result.get("message", "No AEC information was extracted from this document.")
+    error_pages = result.get("error_pages", [])
+    error_page_count = result.get("error_page_count", len(error_pages))
+    total_pages = result.get("total_pages", 0)
+    successful_pages = result.get("successful_pages", 0)
 
-    return f"""# AEC Drawing Report
+    report = f"""# AEC Drawing Report
 
 ## Extraction Status: `{status}`
 
 {message}
+"""
+
+    # Add error page information if available
+    if error_pages:
+        report += f"""
+
+### Page Processing Errors
+
+{error_page_count} out of {total_pages} pages failed to process:
+
+**Failed pages:** {', '.join(map(str, error_pages))}
+
+These pages encountered errors during analysis and were not included in the final consolidation.
+"""
+
+    if status == "consolidation_failed":
+        report += f"""
+
+### Consolidation Failure
+
+The merge step failed after successfully processing {successful_pages} pages.
+Individual page results are available in the output directory, but a consolidated
+model could not be generated.
+"""
+
+    report += """
 
 No element counts, rooms, walls, doors, dimensions, or annotations
 were available to report on. This is **not** a statement that the
@@ -38,10 +68,15 @@ content for this file.
 
 ## Data Gaps / Extraction Limitations
 
-|| Category | Status | Explanation |
-||---|---|---|
-|| All AEC elements | 0 extracted | {message} |
+||| Category | Status | Explanation |
+|||---|---|---|
+||| All AEC elements | 0 extracted | """ + message + """ |
+"""
 
+    if error_pages:
+        report += f"||| Page processing errors | {error_page_count} pages | {len(error_pages)} pages failed to process: {', '.join(map(str, error_pages))} |\n"
+
+    report += """
 ## Suggested Next Steps
 
 - Confirm the correct PDF was uploaded.
@@ -50,6 +85,11 @@ content for this file.
 - Check that the file contains actual drawing pages rather than
   only cover sheets, blank pages, or non-drawing content.
 """
+
+    if error_pages:
+        report += f"- Review the individual page JSON files for error details (pages: {', '.join(map(str, error_pages))}).\n"
+
+    return report
 
 
 async def generate_markdown_report(final_result: Dict[str, Any]) -> str:
@@ -110,28 +150,44 @@ Return ONLY the final Markdown report. No JSON, no explanations.
 """
     
     try:
-        report_response = await client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": report_system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Convert the following extracted AEC drawing "
-                        "JSON into the required long human-readable "
-                        "Markdown report.\n\n"
-                        "AEC JSON:\n"
-                        + json.dumps(final_result, indent=2, ensure_ascii=False)
-                    )
-                }
-            ],
-            max_completion_tokens=16384
-        )
+        max_tokens = 16384
+        for attempt in range(2):  # Try twice, doubling limit on retry
+            report_response = await client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": report_system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            "Convert the following extracted AEC drawing "
+                            "JSON into the required long human-readable "
+                            "Markdown report.\n\n"
+                            "AEC JSON:\n"
+                            + json.dumps(final_result, indent=2, ensure_ascii=False)
+                        )
+                    }
+                ],
+                max_completion_tokens=max_tokens
+            )
+            
+            finish_reason = report_response.choices[0].finish_reason
+            content = report_response.choices[0].message.content.strip()
+            
+            if finish_reason == "length" and attempt == 0:
+                print(f"Warning: Report generation truncated at {max_tokens} tokens. Retrying with higher limit...")
+                max_tokens = 32768  # Double the limit for retry
+                continue
+            
+            if finish_reason == "length":
+                print(f"Warning: Report generation still truncated even at {max_tokens} tokens. Markdown may be incomplete.")
+            
+            return content
         
-        return report_response.choices[0].message.content.strip()
+        # Fallback if both attempts fail
+        return content
     
     except Exception as e:
         return f"# Error Generating Report\n\nFailed to generate report: {str(e)}"
