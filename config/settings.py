@@ -52,8 +52,8 @@ if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY not found in environment variables")
 
 # Processing Configuration
-LLM_MAX_IMAGE_DIMENSION = 2000
-PDF_DPI = 250
+LLM_MAX_IMAGE_DIMENSION = 3000
+PDF_DPI = 150
 MAX_CONTEXT_CHARS = 30000
 
 # Supabase Configuration

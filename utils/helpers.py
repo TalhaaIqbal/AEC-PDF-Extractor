@@ -50,14 +50,15 @@ def image_to_data_url(image_path: str, max_dimension: int = LLM_MAX_IMAGE_DIMENS
 
     original_width, original_height = img.size
     max_original = max(original_width, original_height)
-    scale = min(1.0, max_dimension / max_original)
-
-    if scale < 1.0:
+    
+    # Only resize if image is larger than max_dimension
+    if max_original > max_dimension:
+        scale = max_dimension / max_original
         new_size = (int(original_width * scale), int(original_height * scale))
         img = img.resize(new_size, Image.Resampling.LANCZOS)
 
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=85, optimize=True)
+    img.save(buffer, format="JPEG", quality=90, optimize=True)
     encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     return f"data:image/jpeg;base64,{encoded}"

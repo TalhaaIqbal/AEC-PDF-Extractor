@@ -1,20 +1,165 @@
 {
-  "project": {"project_name": null, "project_number": null},
-  "sheets": [],
-  "levels": [],
-  "grids": [],
-  "rooms": [],
-  "walls": [],
-  "doors": [],
-  "windows": [],
-  "columns": [],
-  "stairs": [],
-  "dimensions": [],
-  "elevations": [],
-  "annotations": [],
-  "references": [],
-  "materials": [],
-  "notes": [],
-  "relationships": [],
-  "pages": []
+  "status": "string",
+  "message": "null | string",
+  "project": {
+    "project_name": "null | string",
+    "project_number": "null | string"
+  },
+  "sheets": [
+    {
+      "sheet_number": "null | string",
+      "sheet_title": "null | string",
+      "drawing_title": "null | string",
+      "discipline": "null | string",
+      "drawing_type": "null | string",
+      "revision": "null | string",
+      "scale": "null | string",
+      "source_page": "integer"
+    }
+  ],
+  "levels": [
+    {
+      "name": "string",
+      "elevation": "null | string",
+      "height": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "grids": [
+    {
+      "grid_line": "string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "rooms": [
+    {
+      "name": "string",
+      "number": "null | string",
+      "area": "null | string",
+      "function": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number", "bbox": [number, number, number, number]}
+    }
+  ],
+  "walls": [
+    {
+      "type": "null | string",
+      "length": "null | string",
+      "thickness": "null | string",
+      "material": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"start": {"x": "number", "y": "number"}, "end": {"x": "number", "y": "number"}}
+    }
+  ],
+  "doors": [
+    {
+      "type": "null | string",
+      "width": "null | string",
+      "swing_direction": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "windows": [
+    {
+      "type": "null | string",
+      "width": "null | string",
+      "height": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "columns": [
+    {
+      "type": "null | string",
+      "dimensions": "null | string",
+      "material": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "stairs": [
+    {
+      "type": "null | string",
+      "rise": "null | string",
+      "run": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "dimensions": [
+    {
+      "value": "string",
+      "units": "null | string",
+      "type": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "elevations": [
+    {
+      "value": "string",
+      "reference": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "annotations": [
+    {
+      "text": "string",
+      "type": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "references": [
+    {
+      "reference": "string",
+      "type": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "materials": [
+    {
+      "name": "string",
+      "type": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "notes": [
+    {
+      "text": "string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "relationships": [
+    {
+      "type": "string",
+      "from": "string",
+      "to": "string",
+      "confidence": "high | medium | low",
+      "source_page": "integer"
+    }
+  ],
+  "pages": [integer],
+  "failed_pages": [integer]
 }

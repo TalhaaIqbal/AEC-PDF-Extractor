@@ -56,7 +56,7 @@ content for this file.
 
 async def generate_markdown_report(final_result: Dict[str, Any]) -> str:
     """
-    Generate human-readable markdown report using LLM
+    Generate human-readable markdown report using LLM with single retry for truncated responses
     
     Args:
         final_result: Final consolidated AEC extraction result
@@ -66,28 +66,44 @@ async def generate_markdown_report(final_result: Dict[str, Any]) -> str:
     """
     
     try:
-        report_response = await client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": REPORT_SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Convert the following extracted AEC drawing "
-                        "JSON into the required long human-readable "
-                        "Markdown report.\n\n"
-                        "AEC JSON:\n"
-                        + json.dumps(final_result, indent=2, ensure_ascii=False)
-                    )
-                }
-            ],
-            max_completion_tokens=16384
-        )
+        # Higher base limit with single retry
+        base_tokens = 32768
+        retry_tokens = 65536
         
-        return report_response.choices[0].message.content.strip()
+        for attempt, max_tokens in enumerate([base_tokens, retry_tokens]):
+            report_response = await client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": REPORT_SYSTEM_PROMPT
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            "Convert the following extracted AEC drawing "
+                            "JSON into the required long human-readable "
+                            "Markdown report.\n\n"
+                            "AEC JSON:\n"
+                            + json.dumps(final_result, indent=2, ensure_ascii=False)
+                        )
+                    }
+                ],
+                max_completion_tokens=max_tokens
+            )
+            
+            finish_reason = report_response.choices[0].finish_reason
+            report_text = report_response.choices[0].message.content.strip()
+            
+            # If response was truncated and this is first attempt, retry once
+            if finish_reason == "length" and attempt == 0:
+                print(f"Report generation: Response truncated at {max_tokens} tokens, retrying once...")
+                continue
+            
+            return report_text
+        
+        # If retry failed, return with warning
+        return report_text + "\n\n[WARNING: Report may be truncated due to length limits]"
     
     except Exception as e:
         return f"# Error Generating Report\n\nFailed to generate report: {str(e)}"

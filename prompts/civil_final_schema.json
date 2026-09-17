@@ -1,0 +1,100 @@
+{
+  "status": "string",
+  "message": "null | string",
+  "project": {
+    "project_name": "null | string",
+    "project_number": "null | string"
+  },
+  "sheets": [
+    {
+      "sheet_number": "null | string",
+      "sheet_title": "null | string",
+      "drawing_title": "null | string",
+      "discipline": "null | string",
+      "drawing_type": "null | string",
+      "revision": "null | string",
+      "scale": "null | string",
+      "source_page": "integer"
+    }
+  ],
+  "stations": [
+    {
+      "station": "string",
+      "offset": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "match_lines": [
+    {
+      "from_station": "string",
+      "to_station": "string",
+      "confidence": "high | medium | low",
+      "source_page": "integer"
+    }
+  ],
+  "curb_gutter": [
+    {
+      "type": "null | string",
+      "side": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "pedestrian_ramps": [
+    {
+      "designation": "null | string",
+      "type": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "right_of_way": [
+    {
+      "type": "null | string",
+      "line_type": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"start": {"x": "number", "y": "number"}, "end": {"x": "number", "y": "number"}}
+    }
+  ],
+  "work_limits": [
+    {
+      "description": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "hatched_areas": [
+    {
+      "pattern": "null | string",
+      "meaning": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"bbox": [number, number, number, number]}
+    }
+  ],
+  "annotations": [
+    {
+      "text": "string",
+      "type": "null | string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "notes": [
+    {
+      "text": "string",
+      "confidence": "high | medium | low",
+      "source_page": "integer",
+      "position": {"x": "number", "y": "number"}
+    }
+  ],
+  "pages": [integer],
+  "failed_pages": [integer]
+}
