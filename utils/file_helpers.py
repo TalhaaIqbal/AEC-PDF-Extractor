@@ -18,8 +18,8 @@ def cleanup_session(session_id: str, upload_dir: Path, output_dir: Path) -> None
         if session_output_dir.exists():
             shutil.rmtree(session_output_dir)
         
-        # Also clean up zip file if it exists
-        zip_path = output_dir.parent / f"{session_id}_results.zip"
+        # Clean up zip file - it's saved in the outputs directory  
+        zip_path = output_dir / f"{session_id}_results.zip"
         if zip_path.exists():
             zip_path.unlink()
     

@@ -26,10 +26,13 @@ async def download_file(session_id: str, file_type: str):
     elif file_type == "markdown":
         file_path = output_dir / "aec_human_readable_report.md"
     elif file_type == "zip":
-        # Create zip file if it doesn't exist
+        # Zip is only created after processing completes
+        if session["status"] != "completed":
+            raise HTTPException(status_code=400, detail="Processing not completed yet")
+        
         zip_path = output_dir.parent / f"{session_id}_results.zip"
         if not zip_path.exists():
-            shutil.make_archive(str(zip_path.with_suffix('')), 'zip', output_dir)
+            raise HTTPException(status_code=404, detail="Zip file not found - processing may have failed")
         file_path = zip_path
     else:
         raise HTTPException(status_code=400, detail="Invalid file type")

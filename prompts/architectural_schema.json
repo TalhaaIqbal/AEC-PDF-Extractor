@@ -1,0 +1,190 @@
+{
+  "page": <int>,
+  "detection_status": "ok" | "no_elements_detected",
+  "sheet": {
+    "sheet_number": null,
+    "sheet_title": null,
+    "drawing_title": null,
+    "discipline": null,
+    "drawing_type": null,
+    "confidence": "high" | "medium" | "low"
+  },
+  "project": {
+    "project_name": null,
+    "project_number": null,
+    "confidence": "high" | "medium" | "low"
+  },
+  "levels": [
+    {
+      "name": <string>,
+      "elevation": <string>,
+      "height": <string>,
+      "units": "feet" | "meters" | "inches",
+      "source_page": <int>,
+      "position": {"x": <float>, "y": <float>},
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "grids": [
+    {
+      "grid_id": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "orientation": "horizontal" | "vertical",
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "rooms": [
+    {
+      "room_number": <string>,
+      "room_name": <string>,
+      "area": <string>,
+      "perimeter": <string>,
+      "function": <string>,
+      "zone": <string>,
+      "position": {"x": <float>, "y": <float>, "width": <float>, "height": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "walls": [
+    {
+      "wall_id": <string>,
+      "type": <string>,
+      "length": <string>,
+      "thickness": <string>,
+      "height": <string>,
+      "material": <string>,
+      "position": {"start": {"x": <float>, "y": <float>}, "end": {"x": <float>, "y": <float>}},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "doors": [
+    {
+      "door_id": <string>,
+      "type": <string>,
+      "width": <string>,
+      "height": <string>,
+      "swing_direction": <string>,
+      "material": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "connects_rooms": [<string>, <string>],
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "windows": [
+    {
+      "window_id": <string>,
+      "type": <string>,
+      "width": <string>,
+      "height": <string>,
+      "material": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "associated_wall": <string>,
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "columns": [
+    {
+      "column_id": <string>,
+      "type": <string>,
+      "dimensions": {"width": <string>, "depth": <string>},
+      "material": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "stairs": [
+    {
+      "stair_id": <string>,
+      "type": <string>,
+      "rise": <string>,
+      "run": <string>,
+      "width": <string>,
+      "number_of_steps": <int>,
+      "connects_levels": [<string>, <string>],
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "dimensions": [
+    {
+      "dimension_id": <string>,
+      "value": <string>,
+      "units": "feet" | "meters" | "inches",
+      "type": "linear" | "angular" | "radial",
+      "element_type": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "elevations": [
+    {
+      "elevation_id": <string>,
+      "value": <string>,
+      "reference": <string>,
+      "units": "feet" | "meters" | "inches",
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "annotations": [
+    {
+      "annotation_id": <string>,
+      "text": <string>,
+      "type": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "references": [
+    {
+      "reference_id": <string>,
+      "type": "section" | "detail" | "elevation",
+      "target": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "materials": [
+    {
+      "material_id": <string>,
+      "name": <string>,
+      "specification": <string>,
+      "application": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "notes": [
+    {
+      "note_id": <string>,
+      "text": <string>,
+      "category": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "relationships": [
+    {
+      "relationship_id": <string>,
+      "type": <string>,
+      "source_element": <string>,
+      "target_element": <string>,
+      "description": <string>,
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ]
+}

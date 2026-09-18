@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 from openai import AsyncOpenAI
 from config.settings import (
     MODEL, OPENAI_API_KEY, SYSTEM_PROMPT, PAGE_JSON_SCHEMA, FINAL_SCHEMA,
-    SCHEMAS, SYSTEM_PROMPTS, DEFAULT_SHEET_TYPE
+    SCHEMAS, SYSTEM_PROMPTS, DEFAULT_SHEET_TYPE, UNIVERSAL_SYSTEM_PROMPT, UNIVERSAL_PAGE_JSON_SCHEMA
 )
 from utils.helpers import compact_json, image_to_data_url, parse_llm_json
 
@@ -62,7 +62,7 @@ def detect_sheet_type(vector_data: Optional[Dict[str, Any]]) -> str:
     return DEFAULT_SHEET_TYPE
 
 
-def build_page_prompt(page_index: int, vector_data: Optional[Dict[str, Any]], sheet_type: str = DEFAULT_SHEET_TYPE) -> str:
+def build_page_prompt(page_index: int, vector_data: Optional[Dict[str, Any]], sheet_type: str = DEFAULT_SHEET_TYPE, schema: str = None) -> str:
     """
     Build prompt for page analysis
     
@@ -70,13 +70,14 @@ def build_page_prompt(page_index: int, vector_data: Optional[Dict[str, Any]], sh
         page_index: Index of the page being analyzed
         vector_data: Optional vector data for the page
         sheet_type: Type of sheet ('civil' or 'architectural')
+        schema: Optional schema string (if None, will be determined from sheet_type)
     
     Returns:
         Formatted prompt string
     """
-    # Get appropriate schema and prompt for sheet type
-    schema = SCHEMAS.get(sheet_type, SCHEMAS[DEFAULT_SHEET_TYPE])
-    system_prompt = SYSTEM_PROMPTS.get(sheet_type, SYSTEM_PROMPTS[DEFAULT_SHEET_TYPE])
+    # Get appropriate schema if not provided
+    if schema is None:
+        schema = SCHEMAS.get(sheet_type, SCHEMAS[DEFAULT_SHEET_TYPE])
     
     vector_text = compact_json(vector_data, max_chars=25000)
 
@@ -117,54 +118,37 @@ async def analyze_page(page_index: int, page_image_path: str, vector_data: Optio
     Returns:
         Analysis result dictionary
     """
-    # Detect sheet type
-    sheet_type = detect_sheet_type(vector_data)
-    
-    # Get appropriate system prompt for sheet type
-    system_prompt = SYSTEM_PROMPTS.get(sheet_type, SYSTEM_PROMPTS[DEFAULT_SHEET_TYPE])
+    # Use universal approach - AI detects sheet type from image itself
+    # This works for both vector and raster/scanned pages
+    system_prompt = UNIVERSAL_SYSTEM_PROMPT
+    schema = UNIVERSAL_PAGE_JSON_SCHEMA
     
     image_url = image_to_data_url(page_image_path)
-    prompt = build_page_prompt(page_index, vector_data, sheet_type)
+    prompt = build_page_prompt(page_index, vector_data, "universal", schema)
 
-    max_tokens = 4096
-    for attempt in range(2):  # Try twice, doubling limit on retry
-        response = await client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]
-                }
-            ],
-            max_completion_tokens=max_tokens
-        )
+    response = await client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": image_url, "detail": "high"}}
+                ]
+            }
+        ],
+        max_completion_tokens=16384
+    )
 
-        finish_reason = response.choices[0].finish_reason
-        text = response.choices[0].message.content.strip()
-        
-        if finish_reason == "length" and attempt == 0:
-            print(f"Warning: Page {page_index + 1} response truncated at {max_tokens} tokens. Retrying with higher limit...")
-            max_tokens = 8192  # Double the limit for retry
-            continue
-        
-        if finish_reason == "length":
-            print(f"Warning: Page {page_index + 1} response still truncated even at {max_tokens} tokens. JSON may be incomplete.")
-        
-        result = parse_llm_json(text, page_index)
-        # Add sheet type to result for tracking
-        result["sheet_type"] = sheet_type
-        return result
-
-    # Fallback if both attempts fail
+    text = response.choices[0].message.content.strip()
     result = parse_llm_json(text, page_index)
-    result["sheet_type"] = sheet_type
+    # Use the sheet_type detected by AI (if present), otherwise use detected type
+    detected_sheet_type = result.get("sheet_type", detect_sheet_type(vector_data))
+    result["sheet_type"] = detected_sheet_type
     return result
 
 
@@ -201,49 +185,72 @@ async def consolidate_results(page_results: list) -> Dict[str, Any]:
     # Determine consolidation approach based on sheet type
     primary_sheet_type = meaningful_results[0].get("sheet_type", DEFAULT_SHEET_TYPE)
     
-    if primary_sheet_type == "civil":
-        return await consolidate_civil_results(meaningful_results)
-    else:
-        return await consolidate_architectural_results(meaningful_results)
+    # Use universal consolidation for all types since universal schema supports both
+    return await consolidate_universal_results(meaningful_results, primary_sheet_type)
+
+
+async def consolidate_universal_results(page_results: list, sheet_type: str) -> Dict[str, Any]:
+    """
+    Consolidate results using universal approach that handles both civil and architectural
+    
+    Args:
+        page_results: List of page analysis results
+        sheet_type: Primary sheet type detected
+    
+    Returns:
+        Consolidated result dictionary
+    """
+    # Use the appropriate system prompt based on detected sheet type
+    system_prompt = SYSTEM_PROMPTS.get(sheet_type, UNIVERSAL_SYSTEM_PROMPT)
+    
+    consolidation_prompt = f"""
+You are consolidating AEC information extracted from multiple pages
+of the SAME document.
+
+Primary sheet type detected: {sheet_type.upper()}
+
+Rules:
+- Keep only meaningful AEC information appropriate to the sheet type.
+- Remove duplicates; merge repeated elements when they clearly refer to the same entity.
+- Preserve page references where useful.
+- Do not invent missing information.
+- Skip pages with "detection_status": "no_elements_detected" - they contributed nothing.
+- If two values conflict and it cannot be resolved, preserve the uncertainty rather than inventing an answer.
+- For civil sheets: validate that stations fall within match line ranges when provided.
+
+Return ONLY valid JSON using this structure:
+
+{FINAL_SCHEMA}
+
+PAGE RESULTS:
+
+{json.dumps(page_results, ensure_ascii=False, indent=2)}
+"""
     
     try:
-        max_tokens = 8192
-        for attempt in range(2):  # Try twice, doubling limit on retry
-            final_response = await client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user",
-                        "content": consolidation_prompt
-                    }
-                ],
-                max_completion_tokens=max_tokens
-            )
-            
-            finish_reason = final_response.choices[0].finish_reason
-            final_text = final_response.choices[0].message.content.strip()
-            
-            if finish_reason == "length" and attempt == 0:
-                print(f"Warning: Consolidation response truncated at {max_tokens} tokens. Retrying with higher limit...")
-                max_tokens = 16384  # Double the limit for retry
-                continue
-            
-            if finish_reason == "length":
-                print(f"Warning: Consolidation response still truncated even at {max_tokens} tokens. JSON may be incomplete.")
-            
-            final_result = parse_llm_json(final_text)
-            return final_result
-        
-        # Fallback if both attempts fail
+        final_response = await client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": consolidation_prompt
+                }
+            ],
+            max_completion_tokens=32768
+        )
+
+        final_text = final_response.choices[0].message.content.strip()
         final_result = parse_llm_json(final_text)
-        
+        final_result["sheet_type"] = sheet_type
+        return final_result
+
     except Exception as e:
-        final_result = {"error": str(e)}
-    
+        final_result = {"error": str(e), "sheet_type": sheet_type}
+
     return final_result
 
 
@@ -259,7 +266,7 @@ async def consolidate_in_batches(page_results: list) -> Dict[str, Any]:
     """
     # Determine primary sheet type
     primary_sheet_type = page_results[0].get("sheet_type", DEFAULT_SHEET_TYPE)
-    system_prompt = SYSTEM_PROMPTS.get(primary_sheet_type, SYSTEM_PROMPTS[DEFAULT_SHEET_TYPE])
+    system_prompt = SYSTEM_PROMPTS.get(primary_sheet_type, UNIVERSAL_SYSTEM_PROMPT)
     
     batch_size = 4  # Process 4 pages at a time
     batches = [page_results[i:i + batch_size] for i in range(0, len(page_results), batch_size)]
@@ -268,42 +275,18 @@ async def consolidate_in_batches(page_results: list) -> Dict[str, Any]:
     for i, batch in enumerate(batches):
         print(f"Processing batch {i + 1}/{len(batches)} ({len(batch)} pages)...")
         
-        if primary_sheet_type == "civil":
-            batch_prompt = f"""
-You are consolidating civil engineering information extracted from multiple pages
-of the SAME roadway/site/civil document.
-
-Rules:
-- Keep only meaningful civil engineering information.
-- Remove duplicates; merge repeated stations, match lines, curb/gutter sections
-  when they clearly refer to the same entity.
-- Preserve page references where useful.
-- Do not invent missing information.
-- If two values conflict and it cannot be resolved, preserve the
-  uncertainty rather than inventing an answer.
-
-Return ONLY valid JSON using this structure:
-
-{FINAL_SCHEMA}
-
-PAGE RESULTS:
-
-{json.dumps(batch, ensure_ascii=False, indent=2)}
-"""
-        else:
-            batch_prompt = f"""
+        batch_prompt = f"""
 You are consolidating AEC information extracted from multiple pages
-of the SAME architectural/engineering/construction document.
+of the SAME document.
+
+Primary sheet type: {primary_sheet_type.upper()}
 
 Rules:
-- Keep only meaningful AEC information.
-- Remove duplicates; merge repeated rooms/walls/doors/windows/levels
-  /grids/dimensions/annotations/references when they clearly refer
-  to the same entity.
+- Keep only meaningful AEC information appropriate to the sheet type.
+- Remove duplicates; merge repeated elements when they clearly refer to the same entity.
 - Preserve page references where useful.
 - Do not invent missing information.
-- If two values conflict and it cannot be resolved, preserve the
-  uncertainty rather than inventing an answer.
+- If two values conflict and it cannot be resolved, preserve the uncertainty rather than inventing an answer.
 
 Return ONLY valid JSON using this structure:
 
@@ -315,38 +298,25 @@ PAGE RESULTS:
 """
         
         try:
-            max_tokens = 8192
-            for attempt in range(2):
-                batch_response = await client.chat.completions.create(
-                    model=MODEL,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": system_prompt
-                        },
-                        {
-                            "role": "user",
-                            "content": batch_prompt
-                        }
-                    ],
-                    max_completion_tokens=max_tokens
-                )
-                
-                finish_reason = batch_response.choices[0].finish_reason
-                batch_text = batch_response.choices[0].message.content.strip()
-                
-                if finish_reason == "length" and attempt == 0:
-                    print(f"Batch {i + 1} truncated at {max_tokens} tokens. Retrying...")
-                    max_tokens = 16384
-                    continue
-                
-                if finish_reason == "length":
-                    print(f"Batch {i + 1} still truncated even at {max_tokens} tokens.")
-                
-                batch_result = parse_llm_json(batch_text)
-                batch_results.append(batch_result)
-                break
-                
+            batch_response = await client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": batch_prompt
+                    }
+                ],
+                max_completion_tokens=32768
+            )
+
+            batch_text = batch_response.choices[0].message.content.strip()
+            batch_result = parse_llm_json(batch_text)
+            batch_results.append(batch_result)
+
         except Exception as e:
             print(f"Error processing batch {i + 1}: {e}")
             batch_results.append({"error": str(e), "batch_index": i})
@@ -356,15 +326,14 @@ PAGE RESULTS:
     final_consolidation_prompt = f"""
 You are consolidating AEC information from batch processing of a large document.
 
+Primary sheet type: {primary_sheet_type.upper()}
+
 Rules:
-- Keep only meaningful AEC information.
-- Remove duplicates; merge repeated rooms/walls/doors/windows/levels
-  /grids/dimensions/annotations/references when they clearly refer
-  to the same entity.
+- Keep only meaningful AEC information appropriate to the sheet type.
+- Remove duplicates; merge repeated elements when they clearly refer to the same entity.
 - Preserve page references where useful.
 - Do not invent missing information.
-- If two values conflict and it cannot be resolved, preserve the
-  uncertainty rather than inventing an answer.
+- If two values conflict and it cannot be resolved, preserve the uncertainty rather than inventing an answer.
 
 Return ONLY valid JSON using this structure:
 
@@ -376,194 +345,29 @@ BATCH RESULTS:
 """
     
     try:
-        max_tokens = 16384
-        for attempt in range(2):
-            final_response = await client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user",
-                        "content": final_consolidation_prompt
-                    }
-                ],
-                max_completion_tokens=max_tokens
-            )
-            
-            finish_reason = final_response.choices[0].finish_reason
-            final_text = final_response.choices[0].message.content.strip()
-            
-            if finish_reason == "length" and attempt == 0:
-                print(f"Final consolidation truncated at {max_tokens} tokens. Retrying...")
-                max_tokens = 32768
-                continue
-            
-            if finish_reason == "length":
-                print(f"Final consolidation still truncated even at {max_tokens} tokens.")
-            
-            final_result = parse_llm_json(final_text)
-            return final_result
-        
+        final_response = await client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": final_consolidation_prompt
+                }
+            ],
+            max_completion_tokens=65536
+        )
+
+        final_text = final_response.choices[0].message.content.strip()
         final_result = parse_llm_json(final_text)
-        
+        final_result["sheet_type"] = primary_sheet_type
+        return final_result
+
     except Exception as e:
-        final_result = {"error": str(e)}
-    
-    return final_result
+        final_result = {"error": str(e), "sheet_type": primary_sheet_type}
 
-
-async def consolidate_architectural_results(page_results: list) -> Dict[str, Any]:
-    """
-    Consolidate architectural results using AI
-    
-    Args:
-        page_results: List of page analysis results
-    
-    Returns:
-        Consolidated result dictionary
-    """
-    consolidation_prompt = f"""
-You are consolidating AEC information extracted from multiple pages
-of the SAME architectural/engineering/construction document.
-
-Rules:
-- Keep only meaningful AEC information.
-- Remove duplicates; merge repeated rooms/walls/doors/windows/levels
-  /grids/dimensions/annotations/references when they clearly refer
-  to the same entity.
-- Preserve page references where useful.
-- Do not invent missing information.
-- Skip pages with "detection_status": "no_elements_detected" -
-  they contributed nothing.
-- If two values conflict and it cannot be resolved, preserve the
-  uncertainty rather than inventing an answer.
-
-Return ONLY valid JSON using this structure:
-
-{FINAL_SCHEMA}
-
-PAGE RESULTS:
-
-{json.dumps(page_results, ensure_ascii=False, indent=2)}
-"""
-    
-    try:
-        max_tokens = 8192
-        for attempt in range(2):  # Try twice, doubling limit on retry
-            final_response = await client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPTS["architectural"]
-                    },
-                    {
-                        "role": "user",
-                        "content": consolidation_prompt
-                    }
-                ],
-                max_completion_tokens=max_tokens
-            )
-            
-            finish_reason = final_response.choices[0].finish_reason
-            final_text = final_response.choices[0].message.content.strip()
-            
-            if finish_reason == "length" and attempt == 0:
-                print(f"Warning: Consolidation response truncated at {max_tokens} tokens. Retrying with higher limit...")
-                max_tokens = 16384  # Double the limit for retry
-                continue
-            
-            if finish_reason == "length":
-                print(f"Warning: Consolidation response still truncated even at {max_tokens} tokens. JSON may be incomplete.")
-            
-            final_result = parse_llm_json(final_text)
-            return final_result
-        
-        # Fallback if both attempts fail
-        final_result = parse_llm_json(final_text)
-        
-    except Exception as e:
-        final_result = {"error": str(e)}
-    
-    return final_result
-
-
-async def consolidate_civil_results(page_results: list) -> Dict[str, Any]:
-    """
-    Consolidate civil engineering results using AI
-    
-    Args:
-        page_results: List of page analysis results
-    
-    Returns:
-        Consolidated result dictionary
-    """
-    consolidation_prompt = f"""
-You are consolidating civil engineering information extracted from multiple pages
-of the SAME roadway/site/civil document.
-
-Rules:
-- Keep only meaningful civil engineering information.
-- Remove duplicates; merge repeated stations, match lines, curb/gutter sections
-  when they clearly refer to the same entity.
-- Preserve page references where useful.
-- Do not invent missing information.
-- Skip pages with "detection_status": "no_elements_detected" -
-  they contributed nothing.
-- If two values conflict and it cannot be resolved, preserve the
-  uncertainty rather than inventing an answer.
-- Validate that stations fall within match line ranges when provided.
-
-Return ONLY valid JSON using this structure:
-
-{FINAL_SCHEMA}
-
-PAGE RESULTS:
-
-{json.dumps(page_results, ensure_ascii=False, indent=2)}
-"""
-    
-    try:
-        max_tokens = 8192
-        for attempt in range(2):  # Try twice, doubling limit on retry
-            final_response = await client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPTS["civil"]
-                    },
-                    {
-                        "role": "user",
-                        "content": consolidation_prompt
-                    }
-                ],
-                max_completion_tokens=max_tokens
-            )
-            
-            finish_reason = final_response.choices[0].finish_reason
-            final_text = final_response.choices[0].message.content.strip()
-            
-            if finish_reason == "length" and attempt == 0:
-                print(f"Warning: Civil consolidation response truncated at {max_tokens} tokens. Retrying with higher limit...")
-                max_tokens = 16384  # Double the limit for retry
-                continue
-            
-            if finish_reason == "length":
-                print(f"Warning: Civil consolidation response still truncated even at {max_tokens} tokens. JSON may be incomplete.")
-            
-            final_result = parse_llm_json(final_text)
-            return final_result
-        
-        # Fallback if both attempts fail
-        final_result = parse_llm_json(final_text)
-        
-    except Exception as e:
-        final_result = {"error": str(e)}
-    
     return final_result
 
 
@@ -582,12 +386,7 @@ async def consolidate_mixed_types(page_results: list, sheet_types: set) -> Dict[
     
     for sheet_type in sheet_types:
         type_results = [r for r in page_results if r.get("sheet_type") == sheet_type]
-        
-        if sheet_type == "civil":
-            type_consolidated = await consolidate_civil_results(type_results)
-        else:
-            type_consolidated = await consolidate_architectural_results(type_results)
-        
+        type_consolidated = await consolidate_universal_results(type_results, sheet_type)
         consolidated[f"{sheet_type}_results"] = type_consolidated
     
     # Create a unified final result

@@ -4,12 +4,19 @@ Coordinates the PDF processing pipeline using modularized services
 """
 import os
 import json
+import asyncio
 from typing import Optional, Callable
 
 from config.settings import PDF_DPI, LLM_MAX_IMAGE_DIMENSION, FINAL_SCHEMA
-from services.pdf_processor import classify_pdf_pages, extract_vector_data, render_page_images
-from services.ai_analyzer import analyze_page, consolidate_results
-from services.report_generator import build_no_data_report, generate_markdown_report
+from services import (
+    classify_pdf_pages_async, 
+    extract_vector_data_async, 
+    render_page_images_async,
+    analyze_page, 
+    consolidate_results,
+    build_no_data_report, 
+    generate_markdown_report
+)
 
 
 async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optional[Callable[[int], None]] = None):
@@ -30,7 +37,7 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
         progress_callback(5)
     
     # Stage 1: Classify pages
-    page_info = classify_pdf_pages(pdf_path)
+    page_info = await classify_pdf_pages_async(pdf_path)
     has_pages = len(page_info) > 0
     
     if not has_pages:
@@ -43,18 +50,28 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
     if progress_callback:
         progress_callback(10)
     
-    # Stage 2: Extract vector data for vector pages
+    # Stage 2: Extract vector data for vector pages in parallel
     vector_data_by_page = {}
-    for p in page_info:
-        if p["is_vector"]:
-            vector_data_by_page[p["page"]] = extract_vector_data(pdf_path, p["page"])
+    vector_pages = [page for page in page_info if page["is_vector"]]
+    
+    if vector_pages:
+        # Extract vector data for all vector pages in parallel
+        vector_tasks = [
+            extract_vector_data_async(pdf_path, page["page"])
+            for page in vector_pages
+        ]
+        vector_results = await asyncio.gather(*vector_tasks)
+        
+        # Map results back to page numbers
+        for page, result in zip(vector_pages, vector_results):
+            vector_data_by_page[page["page"]] = result
     
     if progress_callback:
         progress_callback(20)
     
     # Stage 3: Render page images
     page_image_dir = os.path.join(output_dir, "pdf_pages")
-    page_images = render_page_images(pdf_path, page_image_dir, PDF_DPI, LLM_MAX_IMAGE_DIMENSION)
+    page_images = await render_page_images_async(pdf_path, page_image_dir, PDF_DPI, LLM_MAX_IMAGE_DIMENSION)
     has_page_images = len(page_images) > 0
     
     if not has_page_images:
@@ -67,36 +84,61 @@ async def process_pdf(pdf_path: str, output_dir: str, progress_callback: Optiona
     if progress_callback:
         progress_callback(30)
     
-    # Stage 4: Process each page
+    # Stage 4: Process each page in parallel with concurrency limit
     page_results = []
     failed_pages = []
     total_pages = len(page_images)
+    semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent API calls
     
-    for i, image_path in enumerate(page_images):
+    async def process_single_page(i: int, image_path: str) -> dict:
+        """Process a single page with retry logic for rate limits"""
         vector_data = vector_data_by_page.get(i)
+        max_retries = 3
+        base_delay = 2  # seconds
         
-        try:
-            result = await analyze_page(i, image_path, vector_data)
-        except Exception as e:
-            result = {
-                "page": i + 1,
-                "detection_status": "error",
-                "error": str(e)
-            }
+        for attempt in range(max_retries):
+            try:
+                async with semaphore:
+                    result = await analyze_page(i, image_path, vector_data)
+                    return result
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check if it's a rate limit error
+                is_rate_limit = any(term in error_str for term in ['rate limit', '429', 'too many requests', 'quota'])
+                
+                if attempt < max_retries - 1 and is_rate_limit:
+                    # Exponential backoff for rate limits
+                    delay = base_delay * (2 ** attempt)
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    # Final attempt or non-rate-limit error
+                    result = {
+                        "page": i + 1,
+                        "detection_status": "error",
+                        "error": str(e)
+                    }
+                    return result
+    
+    # Create tasks for all pages
+    tasks = [process_single_page(i, image_path) for i, image_path in enumerate(page_images)]
+    
+    # Process pages in parallel and collect results
+    page_results = await asyncio.gather(*tasks)
+    
+    # Save individual page results and track failures
+    for i, result in enumerate(page_results):
+        if result.get("detection_status") == "error":
             failed_pages.append(i + 1)
-
         
         # Save individual page result
         page_output_file = os.path.join(output_dir, f"page_{i:04d}.json")
         with open(page_output_file, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
-        
-        page_results.append(result)
-        
-        # Update progress
-        if progress_callback:
-            progress = 30 + int((i + 1) / total_pages * 40)
-            progress_callback(progress)
+    
+    # Update progress
+    if progress_callback:
+        progress_callback(70)
     
     # Stage 5: Consolidate results
     # Filter out error pages before consolidation

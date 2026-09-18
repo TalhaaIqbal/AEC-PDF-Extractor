@@ -1,0 +1,134 @@
+{
+  "page": <int>,
+  "detection_status": "ok" | "no_elements_detected",
+  "sheet_type": "roadway" | "site" | "grading" | "utility" | "architectural",
+  "sheet": {
+    "sheet_number": null,
+    "sheet_title": null,
+    "drawing_title": null,
+    "discipline": null,
+    "drawing_type": null,
+    "confidence": "high" | "medium" | "low"
+  },
+  "project": {
+    "project_name": null,
+    "project_number": null,
+    "confidence": "high" | "medium" | "low"
+  },
+  "stations": [
+    {
+      "station_id": <string>,
+      "station_value": <string>,
+      "offset": <string>,
+      "offset_direction": "left" | "right",
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "match_lines": [
+    {
+      "match_line_id": <string>,
+      "start_station": <string>,
+      "end_station": <string>,
+      "position": {"start": {"x": <float>, "y": <float>}, "end": {"x": <float>, "y": <float>}},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "curb_gutter": [
+    {
+      "type": <string>,
+      "station_range": <string>,
+      "specification": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "ramps": [
+    {
+      "ramp_id": <string>,
+      "type": <string>,
+      "station": <string>,
+      "slope": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "right_of_way": [
+    {
+      "row_id": <string>,
+      "type": <string>,
+      "station_range": <string>,
+      "width": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "work_limits": [
+    {
+      "limit_id": <string>,
+      "type": <string>,
+      "station_range": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "hatched_areas": [
+    {
+      "area_id": <string>,
+      "legend_type": <string>,
+      "description": <string>,
+      "position": {"x": <float>, "y": <float>, "width": <float>, "height": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "elevations": [
+    {
+      "elevation_id": <string>,
+      "value": <string>,
+      "station": <string>,
+      "reference": <string>,
+      "units": "feet" | "meters",
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "annotations": [
+    {
+      "annotation_id": <string>,
+      "text": <string>,
+      "type": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "materials": [
+    {
+      "material_id": <string>,
+      "name": <string>,
+      "specification": <string>,
+      "application": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ],
+  "notes": [
+    {
+      "note_id": <string>,
+      "text": <string>,
+      "category": <string>,
+      "position": {"x": <float>, "y": <float>},
+      "source_page": <int>,
+      "confidence": "high" | "medium" | "low"
+    }
+  ]
+}

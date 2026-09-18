@@ -82,15 +82,16 @@ def image_to_data_url(image_path: str, max_dimension: int = LLM_MAX_IMAGE_DIMENS
         img = img.resize(new_size, Image.Resampling.LANCZOS)
 
     buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=85, optimize=True)
+    # Use PNG format for better line drawing quality (no JPEG compression artifacts)
+    img.save(buffer, format="PNG")
     encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-    return f"data:image/jpeg;base64,{encoded}"
+    return f"data:image/png;base64,{encoded}"
 
 
 def parse_llm_json(text: str, page_index: Optional[int] = None) -> Dict[str, Any]:
     """
-    Parse JSON from LLM response with fallback handling
+    Parse JSON from LLM response with fallback handling for truncated responses
     
     Args:
         text: Text response from LLM
@@ -112,6 +113,41 @@ def parse_llm_json(text: str, page_index: Optional[int] = None) -> Dict[str, Any
             return json.loads(text[start:end + 1])
         except Exception:
             pass
+
+    # Try to fix truncated JSON by adding missing closing braces
+    if start != -1:
+        json_str = text[start:]
+        # Count opening vs closing braces to fix truncation
+        open_braces = json_str.count("{")
+        close_braces = json_str.count("}")
+        missing_braces = open_braces - close_braces
+        
+        if missing_braces > 0:
+            # Add missing closing braces
+            fixed_json = json_str + "}" * missing_braces
+            try:
+                result = json.loads(fixed_json)
+                result["_truncated"] = True  # Mark as truncated
+                result["_partial"] = True
+                return result
+            except Exception:
+                pass
+
+    # Last resort: try to extract valid JSON substrings
+    try:
+        # Try to find complete JSON objects within the text
+        import re
+        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+        matches = re.findall(json_pattern, text, re.DOTALL)
+        if matches:
+            # Try the largest match
+            largest_match = max(matches, key=len)
+            result = json.loads(largest_match)
+            result["_truncated"] = True
+            result["_partial"] = True
+            return result
+    except Exception:
+        pass
 
     return {
         "page": (page_index + 1) if page_index is not None else None,

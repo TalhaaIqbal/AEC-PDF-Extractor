@@ -4,8 +4,18 @@ Handles PDF page classification, vector data extraction, and image rendering
 """
 import os
 import shutil
+import asyncio
 from typing import List, Dict, Any
 import pymupdf  # PyMuPDF
+
+__all__ = [
+    'classify_pdf_pages',
+    'classify_pdf_pages_async',
+    'extract_vector_data',
+    'extract_vector_data_async',
+    'render_page_images',
+    'render_page_images_async'
+]
 
 
 def classify_pdf_pages(pdf_path: str, min_text_chars: int = 20, min_vector_paths: int = 5) -> List[Dict[str, Any]]:
@@ -41,6 +51,21 @@ def classify_pdf_pages(pdf_path: str, min_text_chars: int = 20, min_vector_paths
 
     doc.close()
     return page_info
+
+
+async def classify_pdf_pages_async(pdf_path: str, min_text_chars: int = 20, min_vector_paths: int = 5) -> List[Dict[str, Any]]:
+    """
+    Async wrapper for classify_pdf_pages - runs blocking PyMuPDF operations in thread pool
+    
+    Args:
+        pdf_path: Path to the PDF file
+        min_text_chars: Minimum text characters to consider a page as vector
+        min_vector_paths: Minimum vector paths to consider a page as vector
+    
+    Returns:
+        List of page information dictionaries
+    """
+    return await asyncio.to_thread(classify_pdf_pages, pdf_path, min_text_chars, min_vector_paths)
 
 
 def extract_vector_data(pdf_path: str, page_index: int) -> Dict[str, List[Dict[str, Any]]]:
@@ -89,6 +114,20 @@ def extract_vector_data(pdf_path: str, page_index: int) -> Dict[str, List[Dict[s
     return {"texts": texts, "paths": path_summary}
 
 
+async def extract_vector_data_async(pdf_path: str, page_index: int) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Async wrapper for extract_vector_data - runs blocking PyMuPDF operations in thread pool
+    
+    Args:
+        pdf_path: Path to the PDF file
+        page_index: Index of the page to extract data from
+    
+    Returns:
+        Dictionary containing texts and paths
+    """
+    return await asyncio.to_thread(extract_vector_data, pdf_path, page_index)
+
+
 def render_page_images(pdf_path: str, output_dir: str, dpi: int = 250, max_dimension: int = 2000) -> List[str]:
     """
     Render PDF pages to images at optimal resolution for LLM processing
@@ -116,10 +155,27 @@ def render_page_images(pdf_path: str, output_dir: str, dpi: int = 250, max_dimen
         optimal_dpi = min(dpi, int(max_dimension / max_page_dim * 72))
 
         # Render at optimal DPI to avoid wasteful high-res rendering
+        # Use PNG format for better line drawing quality (no JPEG compression artifacts)
         pix = page.get_pixmap(dpi=optimal_dpi, alpha=False)
-        path = os.path.join(output_dir, f"page_{i:04d}.jpg")
+        path = os.path.join(output_dir, f"page_{i:04d}.png")
         pix.save(path)
         page_paths.append(path)
 
     doc.close()
     return page_paths
+
+
+async def render_page_images_async(pdf_path: str, output_dir: str, dpi: int = 250, max_dimension: int = 2000) -> List[str]:
+    """
+    Async wrapper for render_page_images - runs blocking PyMuPDF operations in thread pool
+    
+    Args:
+        pdf_path: Path to the PDF file
+        output_dir: Directory to save rendered images
+        dpi: DPI for rendering (default 250, but images will be resized to max_dimension)
+        max_dimension: Maximum dimension (width or height) for output images
+    
+    Returns:
+        List of paths to rendered images
+    """
+    return await asyncio.to_thread(render_page_images, pdf_path, output_dir, dpi, max_dimension)
