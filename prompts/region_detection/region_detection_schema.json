@@ -1,0 +1,22 @@
+{
+  "page": <int>,
+  "sheet_type": "civil" | "architectural",
+  "detection_status": "ok" | "no_regions_detected",
+  "requires_close_inspection": true | false,
+  "regions": [
+    {
+      "region_id": <string>,
+      "region_type": "title_block" | "drawing_area" | "schedule" | "detail" | "legend" | "annotation" | "grid_system" | "elevation_section" | "plan_view" | "unknown",
+      "priority": "high" | "medium" | "low",
+      "bbox": {
+        "x": <float>,
+        "y": <float>, 
+        "width": <float>,
+        "height": <float>
+      },
+      "description": <string>,
+      "expected_elements": [<string>],
+      "confidence": "high" | "medium" | "low"
+    }
+  ]
+}

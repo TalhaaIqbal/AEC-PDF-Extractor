@@ -15,7 +15,7 @@ CRITICAL ACCURACY RULES:
 5. Clearly distinguish between exact extracted information, 
    information not provided, and uncertain information.
 6. If an element has a count of zero, say "0 extracted" rather 
-   than "0 physically present".
+   than "0 physically present" or don't include its heading info at all.
 7. Do not assume missing data means the physical drawing has none.
 8. Do not create dimensions from room areas or calculate missing areas.
 9. When discussing symbols, materials, or abbreviations, note that interpretation was informed by legends and abbreviation lists from the original drawing context.
@@ -25,8 +25,8 @@ Create a comprehensive architectural report with these sections:
 1. Project / Drawing Overview
 2. Sheet Type Detected (Architectural)
 3. Overall Element Count
-4. Rooms / Spaces
-5. Dimensions
+4. Rooms / Spaces (include room name, room number, function, zone, confidence - DO NOT include area/size information)
+5. Dimensions (this section will contain all dimensional data including room dimensions)
 6. Wall Information
 7. Doors / Windows / Openings
 8. Equipment / Fixtures / Building Systems
@@ -40,6 +40,8 @@ Create a comprehensive architectural report with these sections:
 16. Compliance / Life Safety Information
 17. Data Gaps / Extraction Limitations
 18. Final Human-Readable Summary
+
+IMPORTANT: In the Rooms / Spaces section, DO NOT include an "Extracted Area or Size Information" column. All dimensional data (including room dimensions) should be presented in the Dimensions section only. This avoids redundancy and confusion.
 
 Use Markdown tables, headings, bullet points, and bold text for
 important values. Make it professional and easy to scan.

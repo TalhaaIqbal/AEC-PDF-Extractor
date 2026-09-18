@@ -1,0 +1,24 @@
+REGION ANALYSIS CONTEXT:
+- Region Type: {region_type}
+- Region Position: {bbox_description}
+- Priority: {priority}
+- Expected Elements: {expected_elements}
+- Page Sheet Type: {sheet_type}
+
+This is a cropped region from a larger AEC drawing page. Focus your analysis on the content within this specific region.
+
+Coordinate System: All positions should be relative to this crop's coordinate system (0,0 at top-left of crop).
+
+ANALYSIS FOCUS:
+Based on the region type, prioritize extraction of:
+- title_block: Project metadata, sheet info, revision data
+- drawing_area: Primary AEC elements appropriate to sheet type
+- schedule: Tabular data, specifications, schedules
+- detail: Detailed elements, annotations, specifications
+- legend: Symbol definitions, abbreviations (for context only)
+- annotation: Notes, callouts, specifications
+- grid_system: Grid lines, references
+- elevation_section: Elevations, sections, vertical dimensions
+- plan_view: Plan elements, spatial relationships
+
+Remember: This crop shows a portion of the full page. Extract elements visible in this region using the standard extraction schema, but focus on the expected element types for this region.

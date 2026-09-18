@@ -7,7 +7,9 @@ from typing import Dict, Any, Optional
 from openai import AsyncOpenAI
 from config.settings import (
     MODEL, OPENAI_API_KEY, SYSTEM_PROMPT, PAGE_JSON_SCHEMA, FINAL_SCHEMA,
-    SCHEMAS, SYSTEM_PROMPTS, DEFAULT_SHEET_TYPE, UNIVERSAL_SYSTEM_PROMPT, UNIVERSAL_PAGE_JSON_SCHEMA
+    SCHEMAS, SYSTEM_PROMPTS, DEFAULT_SHEET_TYPE, UNIVERSAL_SYSTEM_PROMPT, UNIVERSAL_PAGE_JSON_SCHEMA,
+    REGION_DETECTION_PROMPT, REGION_DETECTION_SCHEMA, CROP_ANALYSIS_CONTEXT,
+    REGION_CROP_DPI, REGION_ENHANCEMENT_METHOD, MIN_REGION_SIZE, MAX_REGIONS_PER_PAGE, MIN_REGION_CONFIDENCE
 )
 from utils.helpers import compact_json, image_to_data_url, parse_llm_json
 
@@ -122,6 +124,7 @@ async def analyze_page(page_index: int, page_image_path: str, vector_data: Optio
     # This works for both vector and raster/scanned pages
     system_prompt = UNIVERSAL_SYSTEM_PROMPT
     schema = UNIVERSAL_PAGE_JSON_SCHEMA
+    print(f"Page {page_index + 1}: Using prompt 'universal_system_prompt.txt' and schema 'universal_schema.json'")
     
     image_url = image_to_data_url(page_image_path)
     prompt = build_page_prompt(page_index, vector_data, "universal", schema)
@@ -202,6 +205,8 @@ async def consolidate_universal_results(page_results: list, sheet_type: str) -> 
     """
     # Use the appropriate system prompt based on detected sheet type
     system_prompt = SYSTEM_PROMPTS.get(sheet_type, UNIVERSAL_SYSTEM_PROMPT)
+    prompt_name = f"{sheet_type}_system_prompt.txt" if sheet_type in SYSTEM_PROMPTS else "universal_system_prompt.txt"
+    print(f"Consolidation: Using prompt '{prompt_name}' for sheet type '{sheet_type}'")
     
     consolidation_prompt = f"""
 You are consolidating AEC information extracted from multiple pages
@@ -267,6 +272,8 @@ async def consolidate_in_batches(page_results: list) -> Dict[str, Any]:
     # Determine primary sheet type
     primary_sheet_type = page_results[0].get("sheet_type", DEFAULT_SHEET_TYPE)
     system_prompt = SYSTEM_PROMPTS.get(primary_sheet_type, UNIVERSAL_SYSTEM_PROMPT)
+    prompt_name = f"{primary_sheet_type}_system_prompt.txt" if primary_sheet_type in SYSTEM_PROMPTS else "universal_system_prompt.txt"
+    print(f"Batch consolidation: Using prompt '{prompt_name}' for sheet type '{primary_sheet_type}'")
     
     batch_size = 4  # Process 4 pages at a time
     batches = [page_results[i:i + batch_size] for i in range(0, len(page_results), batch_size)]
@@ -403,3 +410,165 @@ async def consolidate_mixed_types(page_results: list, sheet_types: set) -> Dict[
     
     unified["sheet_types"] = list(sheet_types)
     return unified
+
+
+async def detect_regions(page_index: int, page_image_path: str, vector_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Detect regions of interest on a page for closer inspection
+    
+    Args:
+        page_index: Index of the page to analyze
+        page_image_path: Path to the page image
+        vector_data: Optional vector data for the page
+    
+    Returns:
+        Region detection result dictionary
+    """
+    image_url = image_to_data_url(page_image_path)
+    
+    # Build region detection prompt
+    vector_text = compact_json(vector_data, max_chars=25000)
+    
+    region_prompt = f"""
+Analyze AEC drawing page {page_index + 1} to identify regions requiring closer inspection.
+
+The page image (attached) is the PRIMARY evidence.
+
+Optional native PDF text/vector evidence for this page:
+
+===== VECTOR DATA =====
+{vector_text if vector_text else "Not available - this page has no native vector data (likely a scanned/raster page)."}
+===== END VECTOR DATA =====
+
+Identify regions that contain significant AEC information that would benefit from detailed crop-based analysis.
+
+Return JSON using this exact structure:
+
+{REGION_DETECTION_SCHEMA}
+"""
+    
+    print(f"Page {page_index + 1}: Detecting regions using 'region_detection_system_prompt.txt'")
+    
+    response = await client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": REGION_DETECTION_PROMPT
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": region_prompt},
+                    {"type": "image_url", "image_url": {"url": image_url, "detail": "high"}}
+                ]
+            }
+        ],
+        max_completion_tokens=4096
+    )
+    
+    text = response.choices[0].message.content.strip()
+    result = parse_llm_json(text, page_index)
+    
+    # Filter regions based on confidence and size
+    if "regions" in result:
+        filtered_regions = []
+        for region in result["regions"]:
+            # Check confidence level
+            region_confidence = region.get("confidence", "low")
+            if MIN_REGION_CONFIDENCE == "high" and region_confidence != "high":
+                continue
+            elif MIN_REGION_CONFIDENCE == "medium" and region_confidence == "low":
+                continue
+            
+            # Check region size (minimum 5% of page area)
+            bbox = region.get("bbox", {})
+            area = bbox.get("width", 0) * bbox.get("height", 0)
+            if area < 0.05:  # Less than 5% of page area
+                continue
+            
+            filtered_regions.append(region)
+        
+        # Limit number of regions
+        filtered_regions = filtered_regions[:MAX_REGIONS_PER_PAGE]
+        result["regions"] = filtered_regions
+        
+        # Update requires_close_inspection based on filtered regions
+        result["requires_close_inspection"] = len(filtered_regions) > 0
+    
+    return result
+
+
+async def analyze_crop(crop_image_path: str, region_metadata: Dict[str, Any], sheet_type: str) -> Dict[str, Any]:
+    """
+    Analyze a cropped region in detail
+    
+    Args:
+        crop_image_path: Path to the enhanced crop image
+        region_metadata: Region information including type, bbox, expected elements
+        sheet_type: Detected sheet type (civil or architectural)
+    
+    Returns:
+        Detailed analysis result for the crop
+    """
+    image_url = image_to_data_url(crop_image_path)
+    
+    # Build crop-specific context
+    region_type = region_metadata.get("region_type", "unknown")
+    bbox = region_metadata.get("bbox", {})
+    priority = region_metadata.get("priority", "medium")
+    expected_elements = region_metadata.get("expected_elements", [])
+    
+    bbox_description = f"x={bbox.get('x', 0):.2f}, y={bbox.get('y', 0):.2f}, w={bbox.get('width', 0):.2f}, h={bbox.get('height', 0):.2f}"
+    
+    crop_context = CROP_ANALYSIS_CONTEXT.format(
+        region_type=region_type,
+        bbox_description=bbox_description,
+        priority=priority,
+        expected_elements=", ".join(expected_elements) if expected_elements else "various AEC elements",
+        sheet_type=sheet_type
+    )
+    
+    # Use universal schema for crop analysis
+    schema = UNIVERSAL_PAGE_JSON_SCHEMA
+    
+    crop_prompt = f"""
+{crop_context}
+
+Analyze this cropped region from an AEC drawing.
+
+Return JSON using this exact structure:
+
+{schema}
+"""
+    
+    region_id = region_metadata.get("region_id", "unknown")
+    print(f"Analyzing crop '{region_id}' (type: {region_type}, priority: {priority})")
+    
+    response = await client.chat.completions.create(
+        model=MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": UNIVERSAL_SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": crop_prompt},
+                    {"type": "image_url", "image_url": {"url": image_url, "detail": "high"}}
+                ]
+            }
+        ],
+        max_completion_tokens=16384
+    )
+    
+    text = response.choices[0].message.content.strip()
+    result = parse_llm_json(text)
+    
+    # Add region metadata to result
+    result["region_id"] = region_id
+    result["region_type"] = region_type
+    result["crop_metadata"] = region_metadata
+    
+    return result

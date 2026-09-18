@@ -27,8 +27,10 @@ load_dotenv()
 # Directory configuration
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
+TEMP_DIR = Path("temp")
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
+TEMP_DIR.mkdir(exist_ok=True)
 
 # In-memory session storage (in production, use Redis or database)
 sessions: Dict[str, dict] = {}
@@ -50,18 +52,30 @@ LLM_MAX_IMAGE_DIMENSION = 2000  # Maximum dimension for images sent to LLM
 PDF_DPI = 250  # Maximum DPI for rendering (will be optimized to LLM_MAX_IMAGE_DIMENSION)
 MAX_CONTEXT_CHARS = 30000
 
+# Region Processing Configuration (for scanned/raster PDFs)
+REGION_CROP_DPI = 600  # Target DPI for enhanced crop processing (increased for better OCR)
+REGION_ENHANCEMENT_METHOD = "LANCZOS"  # Enhancement method: LANCZOS, BICUBIC, BILINEAR
+MIN_REGION_SIZE = 100  # Minimum pixel size for viable crop
+MAX_REGIONS_PER_PAGE = 20  # Maximum number of regions to process per page
+MIN_REGION_CONFIDENCE = "medium"  # Minimum confidence level for regions to process
+TEXT_ENHANCEMENT_ENABLED = True  # Enable text-specific enhancement for better OCR
+CONTRAST_ENHANCEMENT = True  # Enable contrast enhancement for better text recognition
+
 # Load prompts from files
-ARCHITECTURAL_SYSTEM_PROMPT = load_prompt_file("architectural_system_prompt.txt")
-CIVIL_SYSTEM_PROMPT = load_prompt_file("civil_system_prompt.txt")
-UNIVERSAL_SYSTEM_PROMPT = load_prompt_file("universal_system_prompt.txt")
+ARCHITECTURAL_SYSTEM_PROMPT = load_prompt_file("classes/architectural/architectural_system_prompt.txt")
+CIVIL_SYSTEM_PROMPT = load_prompt_file("classes/civil/civil_system_prompt.txt")
+UNIVERSAL_SYSTEM_PROMPT = load_prompt_file("classes/universal/universal_system_prompt.txt")
+REGION_DETECTION_PROMPT = load_prompt_file("region_detection/region_detection_system_prompt.txt")
+CROP_ANALYSIS_CONTEXT = load_prompt_file("crop_analysis/crop_analysis_context.txt")
 
 # Keep original SYSTEM_PROMPT for backward compatibility
 SYSTEM_PROMPT = ARCHITECTURAL_SYSTEM_PROMPT
 
 # Load schemas from files
-ARCHITECTURAL_PAGE_JSON_SCHEMA = load_prompt_file("architectural_schema.json")
-CIVIL_PAGE_JSON_SCHEMA = load_prompt_file("civil_schema.json")
-UNIVERSAL_PAGE_JSON_SCHEMA = load_prompt_file("universal_schema.json")
+ARCHITECTURAL_PAGE_JSON_SCHEMA = load_prompt_file("classes/architectural/architectural_schema.json")
+CIVIL_PAGE_JSON_SCHEMA = load_prompt_file("classes/civil/civil_schema.json")
+UNIVERSAL_PAGE_JSON_SCHEMA = load_prompt_file("classes/universal/universal_schema.json")
+REGION_DETECTION_SCHEMA = load_prompt_file("region_detection/region_detection_schema.json")
 
 # Keep original PAGE_JSON_SCHEMA for backward compatibility
 PAGE_JSON_SCHEMA = ARCHITECTURAL_PAGE_JSON_SCHEMA

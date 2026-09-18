@@ -177,9 +177,11 @@ async def generate_markdown_report(final_result: Dict[str, Any]) -> str:
     sheet_type = final_result.get("sheet_type", "architectural")
     
     if sheet_type == "civil":
-        report_system_prompt = load_prompt_file("civil_report_prompt.txt")
+        report_system_prompt = load_prompt_file("classes/civil/civil_report_prompt.txt")
+        print(f"Report generation: Using prompt 'classes/civil/civil_report_prompt.txt' for sheet type '{sheet_type}'")
     else:
-        report_system_prompt = load_prompt_file("architectural_report_prompt.txt")
+        report_system_prompt = load_prompt_file("classes/architectural/architectural_report_prompt.txt")
+        print(f"Report generation: Using prompt 'classes/architectural/architectural_report_prompt.txt' for sheet type '{sheet_type}'")
     
     # Compute accurate element counts in code
     element_counts = compute_element_counts(final_result)
